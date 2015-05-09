@@ -1,0 +1,34 @@
+From 181b2e1978696e4df437eb23a59359512c434813 Mon Sep 17 00:00:00 2001
+From: Johannes Mittendorfer <...>
+Date: Sat, 9 May 2015 09:52:33 +0200
+Subject: [PATCH] Make dump1090 output raw bytes instead hex string
+
+---
+ net_io.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/net_io.c b/net_io.c
+index a979883..b21270f 100644
+--- a/net_io.c
++++ b/net_io.c
+@@ -277,14 +277,13 @@ void modesSendRawOutput(struct modesMessage *mm) {
+         }
+         Modes.rawOutUsed += 12; // additional 12 characters for timestamp
+     } else
+-        *p++ = '*';
++        //*p++ = '';
+ 
+     for (j = 0; j < msgLen; j++) {
+-        sprintf(p, "%02X", mm->msg[j]);
+-        p += 2;
++        *p++ = mm->msg[j];
+     }
+ 
+-    *p++ = ';';
++    //*p++ = '';
+     *p++ = '\n';
+ 
+     Modes.rawOutUsed += ((msgLen*2) + 3);
+-- 
+1.9.1
+
