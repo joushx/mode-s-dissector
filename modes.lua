@@ -1,6 +1,8 @@
 
 adsb_proto = Proto("adsb","ADS-B")
 
+icao_f = ProtoField.bytes("ICAO Address!", "icao", base.HEX)
+
 function adsb_proto.dissector(buffer,pinfo,tree)
     pinfo.cols.protocol = "Mode S"
 
@@ -71,7 +73,7 @@ function adsb_proto.dissector(buffer,pinfo,tree)
             control:add(buffer(0,1),"Message Subtype: " .. ca .. " (" .. ca_desc .. ")")
         end
 
-        subtree:add(buffer(1,3),"ICAO Address: " .. buffer(1,3))
+        subtree:add(icao_f, buffer(1,3))
         local ads = subtree:add(buffer(4,7),"ADS Data: " .. buffer(4,7))
         subtree:add(buffer(4,3),"Parity: " .. buffer(4,3))
 
