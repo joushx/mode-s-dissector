@@ -6,9 +6,9 @@ function adsb_proto.dissector(buffer,pinfo,tree)
 
     if buffer:len() == 31 then
 
-    	local subtree = tree:add(adsb_proto, buffer(0,14),"Extended Squitter")
+        local subtree = tree:add(adsb_proto, buffer(0,14),"Extended Squitter")
 
-	    local control = subtree:add(buffer(0,1),"Control: " .. buffer(0,1))
+        local control = subtree:add(buffer(0,1),"Control: " .. buffer(0,1))
 
         -- downlink format
 
@@ -68,11 +68,11 @@ function adsb_proto.dissector(buffer,pinfo,tree)
             end
 
 
-            control:add(buffer(0,1),"Capability: " .. ca .. " (" .. ca_desc .. ")")
+            control:add(buffer(0,1),"Message Subtype: " .. ca .. " (" .. ca_desc .. ")")
         end
 
-        subtree:add(buffer(1,3),"A/C Address: " .. buffer(1,3))
-        local ads = subtree:add(buffer(4,7),"ADS Message: " .. buffer(4,7))
+        subtree:add(buffer(1,3),"ICAO Address: " .. buffer(1,3))
+        local ads = subtree:add(buffer(4,7),"ADS Data: " .. buffer(4,7))
         subtree:add(buffer(4,3),"Parity: " .. buffer(4,3))
 
         local adsdata = buffer(4,7)
@@ -80,20 +80,47 @@ function adsb_proto.dissector(buffer,pinfo,tree)
         if(df == 17) then
             local ca = buffer(0,1):bitfield(5,3)
             if(ca == 0x5) then
-                ads:add(adsdata(0,1),"Format Type Code: " .. adsdata(0,1):bitfield(0,5))
-                ads:add(adsdata(0,1),"Surveillance Status: " .. adsdata(0,1):bitfield(5,2))
-                ads:add(adsdata(0,1),"Single Antenna Flag: " .. adsdata(0,1):bitfield(7,1))
 
-                ads:add(adsdata(1,2),"Altitude: " .. adsdata(1,2):bitfield(0,12))
-                ads:add(adsdata(2,1),"Time: " .. adsdata(1,6):bitfield(12,1))
-                ads:add(adsdata(2,1),"CPR Format: " .. adsdata(1,6):bitfield(13,1))
-                ads:add(adsdata(3,2),"CPR Encoded Latitude: " .. adsdata(1,6):bitfield(14,17))
-                ads:add(adsdata(5,2),"CPR Encoded Longitude: " .. adsdata(1,6):bitfield(31,17))
+                local typecode = adsdata(0,1):bitfield(0,5)
+                local typecode_desc = ""
+
+                if(typecode >= 1 and typecode <= 4) then
+                    ads:add(adsdata(0,1),"Type Code: " .. typecode .. " (Aircraft identification)")
+
+                    print("!!")
+
+                    local table = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ#####_###############0123456789######"
+                    local ident = adsdata(1,6)
+                    local ident_s = ""
+
+                    for i = 0, 40, 6 do
+                        local char = ident:bitfield(i, 6)
+                        ident_s = ident_s .. string.sub(table, char+1, char+1)
+                    end
+
+                    ads:add(adsdata(1,6),"identification: " .. adsdata(1,6) .. " (" .. ident_s .. ")")
+
+                elseif(typecode >= 9 and typecode <= 18) then
+                    ads:add(adsdata(0,1),"Type Code: " .. typecode .. " (Aircraft position)")
+
+                    ads:add(adsdata(0,1),"Surveillance Status: " .. adsdata(0,1):bitfield(5,2))
+                    ads:add(adsdata(0,1),"Single Antenna Flag: " .. adsdata(0,1):bitfield(7,1))
+                    ads:add(adsdata(1,2),"Altitude: " .. adsdata(1,2):bitfield(0,12))
+                    ads:add(adsdata(2,1),"Time: " .. adsdata(1,6):bitfield(12,1))
+                    ads:add(adsdata(2,1),"CPR Format: " .. adsdata(1,6):bitfield(13,1))
+                    ads:add(adsdata(3,2),"CPR Encoded Latitude: " .. adsdata(1,6):bitfield(14,17))
+                    ads:add(adsdata(5,2),"CPR Encoded Longitude: " .. adsdata(1,6):bitfield(31,17))
+
+                elseif(typecode == 19) then
+                    ads:add(adsdata(0,1),"Type Code: 19 (Aircraft Velocity)")
+
+                end
+
             end
         end
     else
 
-    	local subtree = tree:add(adsb_proto, buffer(0,7),"Short Squitter")
+        local subtree = tree:add(adsb_proto, buffer(0,7),"Short Squitter")
 
         local df = buffer(0,1):bitfield(5,3)
         local df_desc = ""
