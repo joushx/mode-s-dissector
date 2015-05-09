@@ -87,8 +87,6 @@ function adsb_proto.dissector(buffer,pinfo,tree)
                 if(typecode >= 1 and typecode <= 4) then
                     ads:add(adsdata(0,1),"Type Code: " .. typecode .. " (Aircraft identification)")
 
-                    print("!!")
-
                     local table = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ#####_###############0123456789######"
                     local ident = adsdata(1,6)
                     local ident_s = ""
@@ -107,13 +105,36 @@ function adsb_proto.dissector(buffer,pinfo,tree)
                     ads:add(adsdata(0,1),"Single Antenna Flag: " .. adsdata(0,1):bitfield(7,1))
                     ads:add(adsdata(1,2),"Altitude: " .. adsdata(1,2):bitfield(0,12))
                     ads:add(adsdata(2,1),"Time: " .. adsdata(1,6):bitfield(12,1))
-                    ads:add(adsdata(2,1),"CPR Format: " .. adsdata(1,6):bitfield(13,1))
+
+                    local cpr_f_desc = ""
+
+                    if(adsdata(1,6):bitfield(13,1) == 0x0) then
+                        cpr_f_desc = "Even Frame"
+                    else
+                        cpr_f_desc = "Odd Frame"
+                    end
+
+                    ads:add(adsdata(2,1),"CPR Format: " .. adsdata(1,6):bitfield(13,1) .. " (" .. cpr_f_desc .. ")")
                     ads:add(adsdata(3,2),"CPR Encoded Latitude: " .. adsdata(1,6):bitfield(14,17))
                     ads:add(adsdata(5,2),"CPR Encoded Longitude: " .. adsdata(1,6):bitfield(31,17))
 
                 elseif(typecode == 19) then
                     ads:add(adsdata(0,1),"Type Code: 19 (Aircraft Velocity)")
 
+                    ads:add(adsdata(0,1),"Subtype: " .. adsdata(0,1):bitfield(5,3))
+                    ads:add(adsdata(1,1),"Intent change flag: " .. adsdata(1,1):bitfield(0,1))
+                    ads:add(adsdata(1,1),"IFR capability flag: " .. adsdata(1,1):bitfield(1,1))
+                    ads:add(adsdata(1,1),"Velocity uncertainty: " .. adsdata(1,1):bitfield(2,3))
+                    ads:add(adsdata(1,1),"East-West velocity sign: " .. adsdata(1,1):bitfield(5,1))
+                    ads:add(adsdata(1,2),"East-West velocity: " .. adsdata(1,2):bitfield(6,10))
+                    ads:add(adsdata(2,1),"North-South velocity sign: " .. adsdata(2,1):bitfield(0,1))
+                    ads:add(adsdata(2,2),"North-South velocity: " .. adsdata(2,2):bitfield(1,10))
+                    ads:add(adsdata(3,1),"Vertical rate: " .. adsdata(2,3):bitfield(11,9))
+                    ads:add(adsdata(3,1),"Vertical rate sign: " .. adsdata(2,3):bitfield(20,1))
+                    ads:add(adsdata(3,1),"Vertical rate source: " .. adsdata(2,3):bitfield(21,1))
+                    ads:add(adsdata(3,1),"Turn indicator: " .. adsdata(2,3):bitfield(22,2))
+                    local baro_diff = ads:add(adsdata(3,1),"Geometric height difference from barometric: " .. adsdata(5,1):bitfield(0,7))
+                    baro_diff:add(adsdata(3,1),"Sign: " .. adsdata(5,1):bitfield(7,1))
                 end
 
             end
