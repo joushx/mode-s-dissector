@@ -135,6 +135,23 @@ function adsb_proto.dissector(buffer,pinfo,tree)
                     ads:add(adsdata(3,1),"Turn indicator: " .. adsdata(2,3):bitfield(22,2))
                     local baro_diff = ads:add(adsdata(3,1),"Geometric height difference from barometric: " .. adsdata(5,1):bitfield(0,7))
                     baro_diff:add(adsdata(3,1),"Sign: " .. adsdata(5,1):bitfield(7,1))
+
+                    local Vew = adsdata(1,2):bitfield(6,10)
+                    local Sew = adsdata(1,1):bitfield(5,1)
+                    local Vns = adsdata(2,2):bitfield(1,10)
+                    local Sns = adsdata(2,1):bitfield(0,1)
+
+                    if Sew == 1 then
+                        Vew = Vew * -1
+                    end
+
+                    if Sns == 1 then
+                        Vns = Vns * -1
+                    end
+
+                    local v = math.sqrt(math.pow(Vew, 2) + math.pow(Vns, 2))
+
+                    ads:add(adsdata(3,1),"[Calculated Velocity: " .. v .. " kn = " .. v*1.852 .. " km/h]")
                 end
 
             end
