@@ -1,193 +1,131 @@
+modes_proto = Proto("mode-s","ADS-B")
 
-adsb_proto = Proto("adsb","ADS-B")
+local f = modes_proto.fields
 
-icao_f = ProtoField.bytes("ICAO Address!", "icao", base.HEX)
+f.icao = ProtoField.uint8("mode-s.icao", "ICAO Address", base.HEX, nil, nil, "Unique aircraft identifier")
+f.df = ProtoField.uint8("mode-s.df", "Downlink Format", base.DEC, {[0] = "Short Air to Air ACAS", [4] = "Surveillance altitude", [5] = "Surveillance IDENT Reply", [11] = "Mode S Only All-Call Reply", [16] = "Long Air to Air ACAS", [17] = "ADS-B", [19] = "Military Extended Squitter",[20] = "Comm. B Altitude, IDENT Reply", [21] = "Comm. B Altitude, IDENT Reply", [22] = "Military", [24] = "Comm. D Extended Length Message"}, nil, "The format of the payload")
+f.ca = ProtoField.uint8("mode-s.ca", "Subtype", base.DEC, {[0] = "None", [5] = "Airborne Position", [6] = "Surface position", [7] = "Status", [8] = "Aircraft ID & Category", [0xa] = "Event Report", [0x61] = "Emergeny/Priority Status", [0x62] = "Target State and Status", [0x65] = "Aircraft Operational Status"}, nil, "The subtype of the message")
+f.parity = ProtoField.bool("mode-s.parity", "Parity (not yet implemented)", nil, {"Correct", "Wrong"})
 
-function adsb_proto.dissector(buffer,pinfo,tree)
+f.typecode = ProtoField.uint8("mode-s.adsb.typecode", "Format type code", base.DEC, {[1] = "Aicraft identification", [2] = "Aicraft identification", [3] = "Aicraft identification", [4] = "Aicraft identification",[5] = "Surface position", [6] = "Surface position", [7] = "Surface position", [8] = "Surface position", [9] = "Airborne position (Baro Alt)", [10] = "Airborne position (Baro Alt)", [11] = "Airborne position (Baro Alt)", [12] = "Airborne position (Baro Alt)", [13] = "Airborne position (Baro Alt)", [14] = "Airborne position (Baro Alt)", [15] = "Airborne position (Baro Alt)", [16] = "Airborne position (Baro Alt)", [17] = "Airborne position (Baro Alt)", [18] = "Airborne position (Baro Alt)", [19] = "Airborne velocity", [20] = "Airborne position (GNSS Height)", [21] = "Airborne position (GNSS Height)", [22] = "Airborne position (GNSS Height)", [23] = "Test message" })
+f.ident = ProtoField.string("mode-s.adsb.ident", "Aircraft Identification")
+
+f.v_subtype = ProtoField.uint8("mode-s.adsb.velocity.subtype", "Subtype", base.DEC, {[1] = "Subsonic ground speed", [2] = "Supersonic ground speed", [3] = "Subsonic air speed", [4] = "Supersonic air speed"})
+f.v_intchange = ProtoField.bool("mode-s.adsb.velocity.intentchange", "Intent change flag")
+f.v_uncertainty = ProtoField.uint8("mode-s.adsb.velocity.uncertainty", "Velocity uncertainty")
+f.v_ewsign = ProtoField.bool("mode-s.adsb.velocity.ewsign", "East-West velocity sign")
+f.v_ew = ProtoField.uint8("mode-s.adsb.velocity.ew", "East-West velocity")
+f.v_nssign = ProtoField.bool("mode-s.adsb.velocity.nssign", "North-South velocity sign")
+f.v_ns = ProtoField.uint8("mode-s.adsb.velocity.ns", "North-South velocity")
+f.v_vrate_source = ProtoField.uint8("mode-s.adsb.velocity.vsrate_source", "Vertical rate source", base.DEC, {[0] = "Baro-pressure altitude", [1] = "Geometric altitude"})
+f.v_vrate_sign = ProtoField.uint8("mode-s.adsb.velocity.vrate_sign", "Vertical rate sign", base.DEC, {[0] = "Up", [1] = "Down"})
+f.v_vrate = ProtoField.uint8("mode-s.adsb.velocity.vrate", "Vertical rate")
+f.v_diff_baro_sign = ProtoField.bool("mode-s.adsb.velocity.diff_baro_sign", "Diff from baro alt sign")
+f.v_diff_baro = ProtoField.uint8("mode-s.adsb.velocity.diff_baro", "Diff from baro alt")
+
+f.p_sstatus = ProtoField.uint8("mode-s.adsb.position.sstatus", "Surveillance status")
+f.p_nicsupp_b = ProtoField.bool("mode-s.adsb.position.nicsupp_b", "NIC supplement-B")
+f.p_alt = ProtoField.uint8("mode-s.adsb.position.alt", "Altitude")
+f.p_time = ProtoField.bool("mode-s.adsb.position.time", "Time")
+f.p_odd = ProtoField.bool("mode-s.adsb.position.odd", "CPR odd frame flag")
+f.p_lat = ProtoField.uint8("mode-s.adsb.position.lat", "Latitude")
+f.p_lon = ProtoField.uint8("mode-s.adsb.position.lon", "Longitude")
+
+function decode_prefix(buffer, pinfo, tree)
+
+  -- control bits
+  local control = tree:add(modes_proto, buffer(0,1), "Control bits")
+  control:add(f.df, buffer(0,1):bitfield(0,5))
+  control:add(f.ca, buffer(0,1):bitfield(5,3))
+
+  -- icao address
+  tree:add(f.icao, buffer(1,3))
+
+end
+
+function decode_parity(buffer, pinfo, tree)
+  -- TODO
+  local x = true
+  tree:add(f.parity, x)
+end
+
+function decode_adsb(buffer, pinfo, tree, subtype)
+
+  local tc = buffer(0,1):bitfield(0,5)
+  tree:add(f.typecode, tc)
+
+  if(tc >= 1 and tc <= 4) then
+
+      local table = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ#####_###############0123456789######"
+      local ident_s = ""
+
+      for i = 0, 40, 6 do
+          local char = buffer(1,6):bitfield(i, 6)
+          ident_s = ident_s .. string.sub(table, char+1, char+1)
+      end
+
+      tree:add(f.ident, ident_s)
+
+  elseif(tc >= 9 and tc <= 18) then
+
+      tree:add(f.p_sstatus, buffer(0,1):bitfield(5,2))
+      tree:add(f.p_alt, buffer(1,2):bitfield(0,12))
+      tree:add(f.p_time, buffer(2,1):bitfield(4,1))
+      tree:add(f.p_odd, buffer(2,1):bitfield(5,1))
+      tree:add(f.p_lat, buffer(2,3):bitfield(6,17))
+      tree:add(f.p_lon, buffer(4,3):bitfield(7,17))
+
+  elseif(tc == 19) then
+
+      local subtype = buffer(0,1):bitfield(5,3)
+      tree:add(f.v_subtype, subtype)
+
+      if(subtype == 1) then
+        tree:add(f.v_intchange, buffer(1,1):bitfield(0,1))
+        tree:add(f.v_uncertainty, buffer(1,1):bitfield(2,3))
+        tree:add(f.v_ewsign, buffer(1,1):bitfield(5,1))
+        tree:add(f.v_ew, buffer(1,2):bitfield(6,10))
+        tree:add(f.v_nssign, buffer(3,1):bitfield(0,1))
+        tree:add(f.v_ns, buffer(3,2):bitfield(1,10))
+        tree:add(f.v_vrate_source, buffer(4,1):bitfield(3,1))
+        tree:add(f.v_vrate_sign, buffer(4,1):bitfield(4,1))
+        tree:add(f.v_vrate, buffer(4,2):bitfield(5,9))
+        tree:add(f.v_diff_baro_sign, buffer(6,1):bitfield(0,1))
+        tree:add(f.v_diff_baro, buffer(6,1):bitfield(1,7))
+      end
+  end
+end
+
+function modes_proto.dissector(buffer,pinfo,tree)
     pinfo.cols.protocol = "Mode S"
 
+    local modes
+
+    -- different behaviour based on mode s message type
     if buffer:len() == 31 then
+        modes = tree:add(modes_proto, buffer(0,14),"Mode S (Enhanced Surveillance)")
+        pinfo.cols.info = "Enhanced Surveillance"
 
-        local subtree = tree:add(adsb_proto, buffer(0,14),"Extended Squitter")
+        decode_prefix(buffer(0,4), pinfo, modes)
+        decode_parity(buffer(11,3), pinfo, modes)
 
-        local control = subtree:add(buffer(0,1),"Control: " .. buffer(0,1))
+        -- decode payload
+        local df = buffer(0,4):bitfield(0,5)
+        if df == 17 then
+          local adsb = tree:add(modes_proto, buffer(0,14),"ADS-B")
 
-        -- downlink format
-
-        local df = buffer(0,1):bitfield(0,5)
-        local df_desc = ""
-
-        if(df == 1) then
-            df_desc = "Acq squitter"
-        elseif (df == 16) then
-            df_desc = "lange Message Air to Air ACAS"
-        elseif (df == 17) then
-            df_desc = "ADS-B"
-        elseif (df == 18) then
-            df_desc = "TIS-B"
-        elseif (df == 19) then
-            df_desc = "Military Ext. Squitter"
-        elseif (df == 20 or df == 21) then
-            df_desc = "Comm. B Altitude, IDENT Reply"
-        elseif (df == 22) then
-            df_desc = "Military"
-        elseif (df == 24) then
-            df_desc = "Comm. D Extended Length Message (ELM)"
-        else
-            df_desc = "?"
+          local subtype = buffer(0,1):bitfield(5,3)
+          decode_adsb(buffer(4,7), pinfo, adsb, subtype)
         end
 
-        pinfo.cols.info = "Extended Squitter (" .. df_desc .. ")"
-
-        control:add(buffer(0,1),"Downlink Format: " .. df .. " (" .. df_desc .. ")")
-
-        -- capabilities
-
-        if(df == 17) then
-            local ca = buffer(0,1):bitfield(5,3)
-            local ca_desc = ""
-
-            if(ca == 0x5) then
-                ca_desc = "Ext. Squitter Airborne Position"
-            elseif (ca == 0x6) then
-                ca_desc = "Ext. Squitter Surface Position"
-            elseif (ca == 0x7) then
-                ca_desc = "Ext. Squitter Status"
-            elseif (ca == 0x8) then
-                ca_desc = "Ext. Squitter A/C Id & Category"
-            elseif (ca == 0x9) then
-                ca_desc = "Ext. Squitter Airborne Velocity"
-            elseif (ca == 0x0A) then
-                ca_desc = "Extended Squitter Event Report"
-            elseif (ca == 0x61) then
-                ca_desc = "Ext. Squitter Emergency/Priority Status"
-            elseif (ca == 0x62) then
-                ca_desc = "Target State and Status"
-            elseif (ca == 0x65) then
-                ca_desc = "Aircraft Operational Status"
-            else
-                ca_desc = "?"
-            end
-
-
-            control:add(buffer(0,1),"Message Subtype: " .. ca .. " (" .. ca_desc .. ")")
-        end
-
-        subtree:add(icao_f, buffer(1,3))
-        local ads = subtree:add(buffer(4,7),"ADS Data: " .. buffer(4,7))
-        subtree:add(buffer(4,3),"Parity: " .. buffer(4,3))
-
-        local adsdata = buffer(4,7)
-
-        if(df == 17) then
-            local ca = buffer(0,1):bitfield(5,3)
-            if(ca == 0x5) then
-
-                local typecode = adsdata(0,1):bitfield(0,5)
-                local typecode_desc = ""
-
-                if(typecode >= 1 and typecode <= 4) then
-                    ads:add(adsdata(0,1),"Type Code: " .. typecode .. " (Aircraft identification)")
-
-                    local table = "#ABCDEFGHIJKLMNOPQRSTUVWXYZ#####_###############0123456789######"
-                    local ident = adsdata(1,6)
-                    local ident_s = ""
-
-                    for i = 0, 40, 6 do
-                        local char = ident:bitfield(i, 6)
-                        ident_s = ident_s .. string.sub(table, char+1, char+1)
-                    end
-
-                    ads:add(adsdata(1,6),"identification: " .. adsdata(1,6) .. " (" .. ident_s .. ")")
-
-                elseif(typecode >= 9 and typecode <= 18) then
-                    ads:add(adsdata(0,1),"Type Code: " .. typecode .. " (Aircraft position)")
-
-                    ads:add(adsdata(0,1),"Surveillance Status: " .. adsdata(0,1):bitfield(5,2))
-                    ads:add(adsdata(0,1),"Single Antenna Flag: " .. adsdata(0,1):bitfield(7,1))
-                    ads:add(adsdata(1,2),"Altitude: " .. adsdata(1,2):bitfield(0,12))
-                    ads:add(adsdata(2,1),"Time: " .. adsdata(1,6):bitfield(12,1))
-
-                    local cpr_f_desc = ""
-
-                    if(adsdata(1,6):bitfield(13,1) == 0x0) then
-                        cpr_f_desc = "Even Frame"
-                    else
-                        cpr_f_desc = "Odd Frame"
-                    end
-
-                    ads:add(adsdata(2,1),"CPR Format: " .. adsdata(1,6):bitfield(13,1) .. " (" .. cpr_f_desc .. ")")
-                    ads:add(adsdata(3,2),"CPR Encoded Latitude: " .. adsdata(1,6):bitfield(14,17))
-                    ads:add(adsdata(5,2),"CPR Encoded Longitude: " .. adsdata(1,6):bitfield(31,17))
-
-                elseif(typecode == 19) then
-                    ads:add(adsdata(0,1),"Type Code: 19 (Aircraft Velocity)")
-
-                    ads:add(adsdata(0,1),"Subtype: " .. adsdata(0,1):bitfield(5,3))
-                    ads:add(adsdata(1,1),"Intent change flag: " .. adsdata(1,1):bitfield(0,1))
-                    ads:add(adsdata(1,1),"IFR capability flag: " .. adsdata(1,1):bitfield(1,1))
-                    ads:add(adsdata(1,1),"Velocity uncertainty: " .. adsdata(1,1):bitfield(2,3))
-                    ads:add(adsdata(1,1),"East-West velocity sign: " .. adsdata(1,1):bitfield(5,1))
-                    ads:add(adsdata(1,2),"East-West velocity: " .. adsdata(1,2):bitfield(6,10))
-                    ads:add(adsdata(2,1),"North-South velocity sign: " .. adsdata(2,1):bitfield(0,1))
-                    ads:add(adsdata(2,2),"North-South velocity: " .. adsdata(2,2):bitfield(1,10))
-                    ads:add(adsdata(3,1),"Vertical rate: " .. adsdata(2,3):bitfield(11,9))
-                    ads:add(adsdata(3,1),"Vertical rate sign: " .. adsdata(2,3):bitfield(20,1))
-                    ads:add(adsdata(3,1),"Vertical rate source: " .. adsdata(2,3):bitfield(21,1))
-                    ads:add(adsdata(3,1),"Turn indicator: " .. adsdata(2,3):bitfield(22,2))
-                    local baro_diff = ads:add(adsdata(3,1),"Geometric height difference from barometric: " .. adsdata(5,1):bitfield(0,7))
-                    baro_diff:add(adsdata(3,1),"Sign: " .. adsdata(5,1):bitfield(7,1))
-
-                    local Vew = adsdata(1,2):bitfield(6,10)
-                    local Sew = adsdata(1,1):bitfield(5,1)
-                    local Vns = adsdata(2,2):bitfield(1,10)
-                    local Sns = adsdata(2,1):bitfield(0,1)
-
-                    if Sew == 1 then
-                        Vew = Vew * -1
-                    end
-
-                    if Sns == 1 then
-                        Vns = Vns * -1
-                    end
-
-                    local v = math.sqrt(math.pow(Vew, 2) + math.pow(Vns, 2))
-
-                    ads:add(adsdata(3,1),"[Calculated Velocity: " .. v .. " kn = " .. v*1.852 .. " km/h]")
-                end
-
-            end
-        end
     else
+        modes = tree:add(modes_proto, buffer(0,7),"Mode S (Elementary Surveillance)")
+        pinfo.cols.info = "Elementary Surveillance"
 
-        local subtree = tree:add(adsb_proto, buffer(0,7),"Short Squitter")
-
-        local df = buffer(0,1):bitfield(5,3)
-        local df_desc = ""
-
-        if(df == 0) then
-            df_desc = "Short air to air ACAS"
-        elseif (df == 4) then
-            df_desc = "Surveillance altitude"
-        elseif (df == 5) then
-            df_desc = "Surveillance identity"
-        elseif (df == 11) then
-            df_desc = "Mode-S only all call reply"
-        else
-            df_desc = "?"
-        end
-
-        pinfo.cols.info = "Short Squitter (" .. df_desc .. ")"
-
-        local control = subtree:add(buffer(0,1),"Control: " .. buffer(0,1))
-
-        control:add(buffer(0,1),"Downlink Format: " .. df .. " (" .. df_desc .. ")")
-
-
-        subtree:add(buffer(1,3),"A/C Address: " .. buffer(1,3))
-        subtree:add(buffer(4,3),"Parity: " .. buffer(4,3))
+        decode_prefix(buffer(0,4), pinfo, modes)
+        decode_parity(buffer(4,3), pinfo, modes)
     end
 end
 
 tcp_table = DissectorTable.get("tcp.port")
-tcp_table:add(30002, adsb_proto)
+tcp_table:add(30002, modes_proto)
