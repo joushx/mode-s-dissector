@@ -1,4 +1,4 @@
-modes_proto = Proto("mode-s","Mode S")
+modes_proto = Proto("mode-s","ADS-B")
 
 local f = modes_proto.fields
 
@@ -32,13 +32,16 @@ f.v_vrate = ProtoField.uint8("mode-s.adsb.velocity.vrate", "Vertical rate", nil,
 f.v_diff_baro_sign = ProtoField.bool("mode-s.adsb.velocity.diff_baro_sign", "Diff from baro alt sign", 8, nil, 0x80)
 f.v_diff_baro = ProtoField.uint8("mode-s.adsb.velocity.diff_baro", "Diff from baro alt", nil, nil, 0x7f)
 
-f.p_sstatus = ProtoField.uint8("mode-s.adsb.position.sstatus", "Surveillance status")
-f.p_nicsupp_b = ProtoField.bool("mode-s.adsb.position.nicsupp_b", "NIC supplement-B")
-f.p_alt = ProtoField.uint8("mode-s.adsb.position.alt", "Altitude")
-f.p_time = ProtoField.bool("mode-s.adsb.position.time", "Time")
-f.p_odd = ProtoField.bool("mode-s.adsb.position.odd", "CPR odd frame flag")
-f.p_lat = ProtoField.uint8("mode-s.adsb.position.lat", "Latitude")
-f.p_lon = ProtoField.uint8("mode-s.adsb.position.lon", "Longitude")
+f.p_sstatus = ProtoField.uint8("mode-s.adsb.position.sstatus", "Surveillance status", nil, nil, 0x6)
+f.p_singleant = ProtoField.bool("mode-s.adsb.position.singleant", "Single antenna flag", 8, {"Single", "Dual"}, 0x1)
+f.p_alt = ProtoField.uint8("mode-s.adsb.position.alt", "Altitude", nil, nil, 0xfff0)
+f.p_alt_encoding = ProtoField.bool("mode-s.adsb.position.alt.encoding", "Encoding", 8, {"Steps of 100ft", "Steps of 25 ft"}, 0x200)
+f.p_alt_value = ProtoField.uint8("mode-s.adsb.position.alt.value", "Value")
+f.p_alt_calculted = ProtoField.uint8("mode-s.adsb.position.alt.calculated", "Calculated altitude")
+f.p_time = ProtoField.bool("mode-s.adsb.position.time", "Time", 8, {"Non UTC", "UTC"}, 0x8)
+f.p_odd = ProtoField.bool("mode-s.adsb.position.odd", "CPR even/odd frame flag", 8, {"Odd", "Even"}, 0x4)
+f.p_lat = ProtoField.uint8("mode-s.adsb.position.lat", "Latitude", nil, nil, 0x3fffe)
+f.p_lon = ProtoField.uint8("mode-s.adsb.position.lon", "Longitude", nil, nil, 0x1ffff)
 
 function decode_prefix(buffer, pinfo, tree)
 
@@ -92,12 +95,23 @@ function decode_adsb(buffer, pinfo, tree, subtype)
 
       pinfo.cols.info:append(" (ADS-B Position)")
 
-      tree:add(f.p_sstatus, buffer(0,1):bitfield(5,2))
-      tree:add(f.p_alt, buffer(1,2):bitfield(0,12))
-      tree:add(f.p_time, buffer(2,1):bitfield(4,1))
-      tree:add(f.p_odd, buffer(2,1):bitfield(5,1))
-      tree:add(f.p_lat, buffer(2,3):bitfield(6,17))
-      tree:add(f.p_lon, buffer(4,3):bitfield(7,17))
+      tree:add(f.p_sstatus, buffer(0,1))
+      tree:add(f.p_singleant, buffer(0,1))
+      local alt = tree:add(f.p_alt, buffer(1,2))
+      alt:add(f.p_alt_encoding, buffer(1,2))
+
+      local first = bit.lshift(buffer(1,1):bitfield(0,7),4)
+      local second = buffer(2,1):bitfield(0,4)
+      local value = bit.bor(first, second)
+      alt:add(f.p_alt_value, buffer(1,1), value)
+
+      local alt_ft = alt:add(f.p_alt_calculted, buffer(1,2), value*25, nil, "ft")
+      alt_ft:set_generated()
+
+      tree:add(f.p_time, buffer(2,1))
+      tree:add(f.p_odd, buffer(2,1))
+      tree:add(f.p_lat, buffer(2,3))
+      tree:add(f.p_lon, buffer(4,3))
 
   -- velocity
   elseif(tc == 19) then
@@ -140,12 +154,18 @@ function modes_proto.dissector(buffer,pinfo,tree)
         -- decode payload
         local df = buffer(0,4):bitfield(0,5)
         if df == 17 then
-          local adsb = tree:add(modes_proto, buffer(4,7),"ADS-B")
+          local adsb = tree:add(buffer(4,7), "ADS-B")
 
           local subtype = buffer(0,1):bitfield(5,3)
           decode_adsb(buffer(4,7), pinfo, adsb, subtype)
         elseif df == 20 or df == 21 then
+          local commb = tree:add(buffer(4,7), "Comm. B")
           pinfo.cols.info:append(" (Comm. B Altitude)")
+
+        elseif df == 24 then
+          local commb = tree:add(buffer(4,7), "Comm. D")
+          pinfo.cols.info:append(" (Comm. D ELM)")
+
         end
 
     else
