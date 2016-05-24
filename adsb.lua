@@ -31,7 +31,7 @@ f.p_singleant = ProtoField.bool("adsb.position.singleant", "Single antenna flag"
 f.p_alt = ProtoField.uint8("adsb.position.alt", "Altitude", nil, nil, 0xfff0)
 f.p_alt_encoding = ProtoField.bool("adsb.position.alt.encoding", "Encoding", 8, {"Steps of 100ft", "Steps of 25 ft"}, 0x200)
 f.p_alt_value = ProtoField.uint8("adsb.position.alt.value", "Value")
-f.p_alt_calculted = ProtoField.uint8("adsb.position.alt.calculated", "Calculated altitude")
+f.p_alt_calculted = ProtoField.uint8("adsb.position.alt.calculated", "Altitude")
 f.p_time = ProtoField.bool("adsb.position.time", "Time", 8, {"Non UTC", "UTC"}, 0x8)
 f.p_odd = ProtoField.bool("adsb.position.odd", "CPR even/odd frame flag", 8, {"Odd", "Even"}, 0x4)
 f.p_lat = ProtoField.uint8("adsb.position.lat", "Latitude", nil, nil, 0x3fffe)
@@ -42,7 +42,7 @@ f.s_subtype = ProtoField.uint8("adsb.status.subtype", "Subtype", base.DEC, nil, 
 function adsb_proto.dissector(buffer,pinfo,tree)
     pinfo.cols.protocol = "ADS-B"
 
-    local adsb = tree:add(adsb_proto, buffer(0, buffer:len()-1), "ADS-B")
+    local adsb = tree:add(adsb_proto, buffer(0, buffer:len()), "ADS-B")
 
     -- extract typecode
     local tc = buffer(0,1):bitfield(0,5)
